@@ -151,6 +151,7 @@ function ret = d_loss_by_d_model(model, data, wd_coefficient)
   % This is the only function that you're expected to change. Right now, it just returns a lot of zeros, which is obviously not the correct output. Your job is to replace that by a correct computation.
   ret.input_to_hid = model.input_to_hid * 0;
   ret.hid_to_class = model.hid_to_class * 0;
+  m = size(data.targets,2);
   
   % Before we can calculate the gradient, we need to calculate a variety of intermediate values, like the state of the hidden units.
   hid_input = model.input_to_hid * data.inputs; % input to the hidden units, i.e. before the logistic. size: <number of hidden units> by <number of data cases>
@@ -160,22 +161,15 @@ function ret = d_loss_by_d_model(model, data, wd_coefficient)
   log_class_prob = class_input - repmat(class_normalizer, [size(class_input, 1), 1]); % log of probability of each class. size: <number of classes, i.e. 10> by <number of data cases>
   class_prob = exp(log_class_prob); % probability of each class. Each column (i.e. each case) sums to 1. size: <number of classes, i.e. 10> by <number of data cases>
 
-  % first compute the gradient for w.r.t. the hidden -> softmax weights
+  %we use this term in a few places
   diff = class_prob - data.targets; % <num classes x num cases>
-  % hid_output <hidden x cases>
-  before_avg = (diff * hid_output');
-  after_avg = before_avg ./ (size(data.targets,2));
-  ret.hid_to_class = after_avg + (model.hid_to_class * wd_coefficient); % <classes x hidden>
+  
+  % first compute the gradient for w.r.t. the hidden -> softmax weights
+  ret.hid_to_class = (1 / m) * (diff * hid_output') + (model.hid_to_class * wd_coefficient);
   
   % next, compute the gradient for the input -> hidden weights
-  % model.hid to class = <num classes x num hidden units>
-  weight_factor = diff' * model.hid_to_class; % = <num cases x num hidden units>
-  hidden_factor = hid_output .* (1 - hid_output); % <num hidden units x num cases>
-  almost = hidden_factor .* weight_factor'; % = <num hidden units x num cases>
-  % data.inputs = <num inputs x num cases>
-  before_avg = almost * data.inputs'; % = <num hidden units x num inputs>
-  after_avg = before_avg ./ (size(data.targets,2));
-  ret.input_to_hid = after_avg + (model.input_to_hid * wd_coefficient);
+  before_reg = (diff' * model.hid_to_class)' .* hid_output .* (1 - hid_output) * data.inputs' * (1 / m);
+  ret.input_to_hid = before_reg + (model.input_to_hid * wd_coefficient);
   
 end
 
